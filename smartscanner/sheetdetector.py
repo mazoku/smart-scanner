@@ -58,16 +58,24 @@ class SheetDetector():
                     inters.append(inter)
 
         sums = [x + y for x, y in inters]
-        ul = inters[np.argmin(sums)]
+        diffs = [x - y for x, y in inters]
+        tl = inters[np.argmin(sums)]
         br = inters[np.argmax(sums)]
+        tr = inters[np.argmax(diffs)]
+        bl = inters[np.argmin(diffs)]
 
         img_vis = img.copy()
         for l in line_types:
             cv2.line(img_vis, l[0], l[1], (255, 0, 0), 2)
         for pt in inters:
             cv2.circle(img_vis, pt, 5, (0, 255, 0), 2)
-        cv2.circle(img_vis, ul, 5, (255, 0, 255), 2)
-        cv2.circle(img_vis, br, 5, (255, 0, 255), 2)
+        pts = (tl, br, tr, bl)
+        texts = ('tl', 'br', 'tr', 'bl')
+        for pt, txt in zip(pts, texts):
+            cv2.circle(img_vis, pt, 5, (255, 0, 255), 2)
+            cv2.putText(img_vis, txt, (pt[0], pt[1]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
+        # cv2.circle(img_vis, br, 5, (255, 0, 255), 2)
+        # cv2.putText(img_vis, 'tl', (tl[0], tl[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255))
         cv2.imshow('expanded', img_vis)
 
         cv2.waitKey(0)
