@@ -33,6 +33,11 @@ class SheetDetector():
         cv2.imshow('Biggest contour', im_vis)
 
     def lines(self, img, edges):
+        cnts = cv2.findContours(edges.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[-2]
+        cnts = sorted(cnts, key=cv2.contourArea, reverse=True)
+        biggest_c = cnts[0]
+        app = cv2.approxPolyDP(biggest_c, 0.01 * cv2.arcLength(biggest_c, True), True)
+
         lines = skitra.probabilistic_hough_line(edges, threshold=10, line_length=80, line_gap=2)
 
         # sort the lines by their length (descending order)
@@ -63,10 +68,12 @@ class SheetDetector():
         br = inters[np.argmax(sums)]
         tr = inters[np.argmax(diffs)]
         bl = inters[np.argmin(diffs)]
+        sheet = np.array([np.expand_dims(np.array(x), 0) for x in (tl, tr, br, bl)])
 
         img_vis = img.copy()
         for l in line_types:
             cv2.line(img_vis, l[0], l[1], (255, 0, 0), 2)
+        cv2.drawContours(img_vis, [sheet], -1, (255, 255, 0), 2)
         for pt in inters:
             cv2.circle(img_vis, pt, 5, (0, 255, 0), 2)
         pts = (tl, br, tr, bl)
