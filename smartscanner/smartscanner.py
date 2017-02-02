@@ -1,6 +1,6 @@
 import cv2
 
-from sheet import SheetDetector
+from sheetdetector import SheetDetector
 
 # read test image
 fname = '../data/sheet1.png'
