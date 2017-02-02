@@ -4,6 +4,7 @@ import numpy as np
 import skimage.transform as skitra
 
 import helpers
+import corner_detector
 
 is_cv_v2 = int(cv2.__version__[0]) == 2
 
@@ -68,7 +69,8 @@ class SheetDetector():
         br = inters[np.argmax(sums)]
         tr = inters[np.argmax(diffs)]
         bl = inters[np.argmin(diffs)]
-        sheet = np.array([np.expand_dims(np.array(x), 0) for x in (tl, tr, br, bl)])
+        corners = (tl, tr, br, bl)
+        sheet = np.array([np.expand_dims(np.array(x), 0) for x in corners])
 
         img_vis = img.copy()
         for l in line_types:
@@ -76,17 +78,20 @@ class SheetDetector():
         cv2.drawContours(img_vis, [sheet], -1, (255, 255, 0), 2)
         for pt in inters:
             cv2.circle(img_vis, pt, 5, (0, 255, 0), 2)
-        pts = (tl, br, tr, bl)
-        texts = ('tl', 'br', 'tr', 'bl')
-        for pt, txt in zip(pts, texts):
+        texts = ('tl', 'tr', 'br', 'bl')
+        for pt, txt in zip(corners, texts):
             cv2.circle(img_vis, pt, 5, (255, 0, 255), 2)
             cv2.putText(img_vis, txt, (pt[0], pt[1]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
         # cv2.circle(img_vis, br, 5, (255, 0, 255), 2)
         # cv2.putText(img_vis, 'tl', (tl[0], tl[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255))
         cv2.imshow('expanded', img_vis)
 
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
+
+        for pt in corners:
+            roi = corner_detector.get_roi(pt, img.shape, width=31, height=31, img=img)
+            corner_detector.detect_corner(img, roi)
 
         # inters = []
         # line_types = helpers.merge_lines(lines)
