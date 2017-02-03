@@ -18,7 +18,11 @@ class SheetDetector():
     def __init__(self):
         pass
 
-    def biggest_rot_rect(self, img, edges):
+    def biggest_rot_rect(self, img):
+        edges = cv2.Canny(img, 50, 200)
+        edges = cv2.dilate(edges, np.ones((3, 3)), iterations=2)
+        edges = cv2.erode(edges, np.ones((3, 3)), iterations=2)
+
         # vybrat nejvetsi konturu
         cnts = cv2.findContours(edges.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[-2]
         cnts = sorted(cnts, key=cv2.contourArea, reverse=True)
@@ -42,7 +46,6 @@ class SheetDetector():
         edges = cv2.Canny(img, 50, 200)
 
         cv2.imshow('edges', edges)
-        cv2.waitKey(0)
 
         edges = cv2.dilate(edges, np.ones((3, 3)), iterations=2)
         edges = cv2.erode(edges, np.ones((3, 3)), iterations=2)
@@ -51,9 +54,11 @@ class SheetDetector():
         biggest_c = cnts[0]
         app = cv2.approxPolyDP(biggest_c, 0.01 * cv2.arcLength(biggest_c, True), True)
 
-        im_vis = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        # im_vis = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        im_vis = img.copy()
         cv2.drawContours(im_vis, [app], -1, (0, 0, 255), 2)
         cv2.imshow('biggest contour', im_vis)
+        # cv2.imwrite('biggest_cnt.png', im_vis)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
@@ -72,6 +77,7 @@ class SheetDetector():
         im_vis = img.copy()
         cv2.drawContours(im_vis, [app], -1, (0, 0, 255), 2)
         cv2.imshow('biggest contour', im_vis)
+        cv2.imwrite('otsu-noncontrast.png', im_vis)
 
         cv2.imshow('otsu', th)
 
@@ -100,17 +106,21 @@ class SheetDetector():
         cv2.destroyAllWindows()
 
     def superpixels(self, img, radius=20):
-        segments = skiseg.slic(img, 30, sigma=1)
+        segments = skiseg.slic(img, 30, sigma=0)
         n_segs = segments.max() + 1
 
+        # plt.figure()
+        # plt.imshow(skiseg.mark_boundaries(img, segments, (1, 0, 0)))
+        # plt.show()
+
         # defining central roi
-        roi = np.zeros(img.shape[:2])
-        center = (int(round(img.shape[1] / 2)), int(round(img.shape[0] / 2)))
-        cv2.circle(roi, center, radius, 1, -1)
-        roi = roi.astype(np.uint8)
+        # roi = np.zeros(img.shape[:2])
+        # center = (int(round(img.shape[1] / 2)), int(round(img.shape[0] / 2)))
+        # cv2.circle(roi, center, radius, 1, -1)
+        # roi = roi.astype(np.uint8)
 
         # labels = [0] * n_segs
-        mask = self.mask2supmask(segments, roi)
+        # mask = self.mask2supmask(segments, roi)
 
         # region growing
         # change = True
@@ -125,15 +135,24 @@ class SheetDetector():
         #     plt.show()
         #     mask = mask_out
 
+        img_cs = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        # img_cs = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+
         # k-means clustering
-        img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        segs_hsv = []
+        # img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        # img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        # cv2.imshow('hsv', img_hsv)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
+        segs_cs = []
         for l in range(n_segs):
-            hsv_val = [np.median(img_hsv[:, :, i][np.nonzero(segments == l)]) for i in range(3)]
-            segs_hsv.append(hsv_val)
+            # cs_val = [np.median(img_hsv[:, :, i][np.nonzero(segments == l)]) for i in range(3)]
+            cs_val = [np.median(img_cs[:, :, i][np.nonzero(segments == l)]) for i in range(3)]
+            # cs_val = [img_cs[:, :, i][np.nonzero(segments == l)].mean() for i in range(3)]
+            segs_cs.append(cs_val)
 
         clt = KMeans(n_clusters=2)
-        clt.fit(segs_hsv)
+        clt.fit(segs_cs)
 
         res = np.zeros(img.shape[:2])
         for l in range(n_segs):
@@ -143,18 +162,25 @@ class SheetDetector():
         cnt = cv2.findContours(res, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[-2][0]
         app = cv2.approxPolyDP(cnt, 0.01 * cv2.arcLength(cnt, True), True)
         im_vis = img.copy()
-        cv2.drawContours(im_vis, [app], -1, (0, 0, 255), 2)
+        # cv2.drawContours(im_vis, [app], -1, (0, 0, 255), 2)
+        cv2.drawContours(im_vis, [cnt], -1, (0, 0, 255), 2)
 
         cv2.imshow('clustering', res)
         cv2.imshow('sheet', im_vis)
+        # cv2.imwrite('kmeans.png', im_vis)
+
+        print ['{}: {}'.format(i, c) for i, c in enumerate(segs_cs)]
+        plt.figure()
+        plt.subplot(221), plt.imshow(skiseg.mark_boundaries(img, segments, (1, 0, 0)))
+        plt.subplot(222), plt.imshow(segments, 'jet')
+        plt.subplot(223), plt.imshow(im_vis)
+        plt.subplot(224), plt.imshow(segments == 2)
+        plt.show()
+
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
-        # fig = plt.figure()
-        # ax = fig.add_subplot(1, 1, 1)
-        # ax.imshow(skiseg.mark_boundaries(img, segments))
-        # plt.axis("off")
-        # plt.show()
+        return app
 
     def grow_mask(self, lab_im, mask, img, t=20):
         #TODO: konverzi obrazku do HDV udelat poue jednou vne teto metody
@@ -328,15 +354,15 @@ class SheetDetector():
         # TODO: pridat okraje pro analyzu jasu listu a pozadi
         # pridat region uprostred, ktery musi obsahovat list
         # pridat okraje, ktere nesmi obsahovat list
-        edges = cv2.Canny(bil, 50, 200)
-        edges = cv2.dilate(edges, np.ones((3, 3)), iterations=2)
-        edges = cv2.erode(edges, np.ones((3, 3)), iterations=2)
+        # edges = cv2.Canny(bil, 50, 200)
+        # edges = cv2.dilate(edges, np.ones((3, 3)), iterations=2)
+        # edges = cv2.erode(edges, np.ones((3, 3)), iterations=2)
 
         # biggest rot rect
-        # self.biggest_rot_rect(img, edges)
+        # self.biggest_rot_rect(img)
 
         # biggest contour
-        # self.biggest_contour(bil)
+        # self.biggest_contour(img)
 
         # probabilistic hough
         # self.lines(img, edges)
@@ -348,7 +374,18 @@ class SheetDetector():
         # self.color_model(img)
 
         # superpixels
-        self.superpixels(img)
+        cnt = self.superpixels(img)
+
+        # align image
+        warped = helpers.four_point_transform(img, cnt.reshape(4, 2))
+
+        img_vis = img.copy()
+        cv2.drawContours(img_vis, [cnt], -1, (0, 0, 255), 2)
+        cv2.imshow('orig', img_vis)
+        cv2.imshow('warped', warped)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+        cv2.imwrite('notes.png', warped)
 
         # show the original image and the edge detected image
         # cv2.imshow("Image", img)
@@ -358,7 +395,8 @@ class SheetDetector():
 
 
 if __name__ == '__main__':
-    fname = '../data/sheet1.png'
+    # fname = '../data/sheet1.png'
+    fname = '../data/sheet2.png'
     im = cv2.imread(fname)
 
     sd = SheetDetector()
