@@ -5,6 +5,9 @@ import imutils
 import numpy as np
 import skimage.transform as skitra
 import skimage.segmentation as skiseg
+import skimage.future as skifut
+import skimage.color as skicol
+import skimage.feature as skifea
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 
@@ -43,9 +46,70 @@ class SheetDetector():
         cv2.imshow('Biggest contour', im_vis)
 
     def biggest_contour(self, img):
-        edges = cv2.Canny(img, 50, 200)
+        #TODO: nehledat hrany v GRAY ale v jednom z HSV kanalu
+        img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        chans = cv2.split(img_hsv)
 
-        cv2.imshow('edges', edges)
+        for i, c in enumerate(chans):
+            cs = cv2.bilateralFilter(c, 11, 17, 17)
+            # cs = cv2.medianBlur(c, 11)
+            chans[i] = cs
+
+        # cv2.imshow('HSV', np.hstack((h, s, v)))
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
+
+        plt.figure()
+        plt.subplot(131), plt.imshow(chans[0], 'gray')
+        plt.subplot(132), plt.imshow(chans[1], 'gray')
+        plt.subplot(133), plt.imshow(chans[2], 'gray')
+
+        # GLCM ----
+        # glcms = []
+        # for c in chans:
+        #     glcm = skifea.greycomatrix(c, [1], [0, np.pi/4, np.pi/2, 3*np.pi/4])
+        #     glcm = glcm.sum(axis=3).sum(axis=2)
+        #     glcms.append(glcm)
+        #
+        # plt.figure()
+        # for i, g in enumerate(glcms):
+        #     plt.subplot(1, 3, i + 1), plt.imshow(g, 'jet', interpolation='nearest')
+        # plt.show()
+        # ----
+
+            # plt.figure()
+            # plt.suptitle('ex1=%.2f, ex=%.2f, rat1=%.2f, rat2=%.2f' % (extents[0], extents[1], ratios[0], ratios[1]))
+            # plt.subplot(131), plt.imshow(img, 'gray')
+            # plt.subplot(132), plt.imshow(m1, 'gray')
+            # plt.subplot(133), plt.imshow(m2, 'gray')
+            # plt.show()
+
+        # ----
+
+        colors = ("r", "g", "b")
+        plt.figure()
+        # loop over the image channels
+        for (chan, color) in zip(chans, colors):
+            # create a histogram for the current channel and plot it
+            hist = cv2.calcHist([chan], [0], None, [256], [0, 256])
+            plt.plot(hist, color=color)
+            plt.xlim([0, 256])
+        plt.show()
+        edges = cv2.Canny(chans[1], 50, 200)
+
+        # gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        # gray = cv2.bilateralFilter(gray, 11, 5, 5)
+        # edges = cv2.Canny(gray, 50, 200)
+        # edges2 = cv2.Canny(img, 50, 200, apertureSize=5)
+        # edges = cv2.Canny(img, 50, 200, apertureSize=5, L2gradient=True)
+
+        # edges = 255 * (cv2.Laplacian (img, cv2.CV_64F, ksize=3, delta=10) < 0).astype(np.uint8)
+
+        # cv2.imshow('edges', np.hstack((edges, edges2, edges3)))
+        # cv2.imshow('edges', edges)
+        # cv2.waitKey(0)
+
+        # cv2.imshow('edges', edges)
 
         edges = cv2.dilate(edges, np.ones((3, 3)), iterations=2)
         edges = cv2.erode(edges, np.ones((3, 3)), iterations=2)
@@ -62,28 +126,53 @@ class SheetDetector():
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
-    def threshold(self, img):
-        ret, th = cv2.threshold(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    def thresholding(self, img):
+        img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        chans = cv2.split(img_hsv)
 
-        th = cv2.erode(th, np.ones((3, 3)), iterations=2)
-        th = cv2.dilate(th, np.ones((3, 3)), iterations=2)
+        for i, c in enumerate(chans):
+            cs = cv2.bilateralFilter(c, 11, 17, 17)
+            chans[i] = cs
 
-        cnts = cv2.findContours(th.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[-2]
-        cnts = sorted(cnts, key=cv2.contourArea, reverse=True)
-        biggest_c = cnts[0]
-        app = cv2.approxPolyDP(biggest_c, 0.01 * cv2.arcLength(biggest_c, True), True)
+        candidates = []
+        for c in chans:
+            ret, th = cv2.threshold(c, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            m1 = c < th
+            m2 = c >= th
 
-        # im_vis = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+            for m in (m1, m2):
+                cnts = cv2.findContours(m.copy().astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[-2]
+                cnt = sorted(cnts, key=cv2.contourArea, reverse=True)[0]
+                rect = cv2.minAreaRect(cnt)
+                ((x, y), (w, h), rot) = rect
+                rat = (w * h) / (c.shape[0] * c.shape[1])
+
+                area = cv2.contourArea(cnt)
+                ex = area / (w * h)
+                if rat < 0.95:
+                    candidates.append((m, ex))
+
+        candidates = sorted(candidates, key=lambda cand: cand[1], reverse=True)
+
+        obj = candidates[0][0].astype(np.uint8)
+        obj = cv2.erode(obj, np.ones((3,3)), iterations=2)
+        obj = cv2.dilate(obj, np.ones((3,3)), iterations=2)
+
+        cnts = cv2.findContours(obj, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[-2]
+        cnt = sorted(cnts, key=cv2.contourArea, reverse=True)[0]
+        cnt = cv2.approxPolyDP(cnt, 0.01 * cv2.arcLength(cnt, True), True)
         im_vis = img.copy()
-        cv2.drawContours(im_vis, [app], -1, (0, 0, 255), 2)
-        cv2.imshow('biggest contour', im_vis)
-        cv2.imwrite('otsu-noncontrast.png', im_vis)
+        cv2.drawContours(im_vis, [cnt], -1, (0, 0, 255), 3)
 
-        cv2.imshow('otsu', th)
+        plt.figure()
+        plt.subplot(141), plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)), plt.title('input'), plt.axis('off')
+        plt.subplot(142), plt.imshow(chans[0], 'gray'), plt.title('hue'), plt.axis('off')
+        plt.subplot(143), plt.imshow(chans[1], 'gray'), plt.title('saturation'), plt.axis('off')
+        plt.subplot(144), plt.imshow(chans[2], 'gray'), plt.title('value'), plt.axis('off')
+        # plt.subplot(155), plt.imshow(cv2.cvtColor(im_vis, cv2.COLOR_BGR2RGB)), plt.title('result'), plt.axis('off')
+        plt.show()
 
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-        # cv2.destroyAllWindows()
+        return cnt
 
     def color_model(self, img, radius=80, width=10):
         in_roi = np.zeros(img.shape[:2])
@@ -251,6 +340,29 @@ class SheetDetector():
             mask_out += lab_im == l
         return mask_out
 
+    def mser(self, img):
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        # gauss = cv2.GaussianBlur(gray, (5, 5), 0)
+        bil = cv2.bilateralFilter(gray, 0, sigmaColor=5, sigmaSpace=10)
+
+        # detect MSER keypoints in the image
+        detector = cv2.MSER_create(1, 1000, 94400, 0.05, 0.02, 200, 1.01, 0.003, 5)
+        regions = detector.detectRegions(bil, None)
+        hulls = [cv2.convexHull(p.reshape(-1, 1, 2)) for p in regions]
+
+        im_vis = img.copy()
+
+        cv2.polylines(im_vis, hulls, 1, (0, 255, 0))
+        # loop over the keypoints and draw them
+        # for kp in kps:
+        #     r = int(0.5 * kp.size)
+        #     (x, y) = np.int0(kp.pt)
+        #     cv2.circle(im_vis, (x, y), r, (0, 255, 255), 2)
+
+        # show the image
+        cv2.imshow("Images", np.hstack([img, im_vis]))
+        cv2.waitKey(0)
+
     def lines(self, img, edges):
         lines = skitra.probabilistic_hough_line(edges, threshold=10, line_length=80, line_gap=2)
 
@@ -334,6 +446,67 @@ class SheetDetector():
         #
         # cv2.imshow('hough', im_hough)
 
+    def _weight_mean_color(self, graph, src, dst, n):
+        """Callback to handle merging nodes by recomputing mean color.
+
+        The method expects that the mean color of `dst` is already computed.
+
+        Parameters
+        ----------
+        graph : RAG
+            The graph under consideration.
+        src, dst : int
+            The vertices in `graph` to be merged.
+        n : int
+            A neighbor of `src` or `dst` or both.
+
+        Returns
+        -------
+        data : dict
+            A dictionary with the `"weight"` attribute set as the absolute
+            difference of the mean color between node `dst` and `n`.
+        """
+
+        diff = graph.node[dst]['mean color'] - graph.node[n]['mean color']
+        diff = np.linalg.norm(diff)
+        return {'weight': diff}
+
+    def merge_mean_color(self, graph, src, dst):
+        """Callback called before merging two nodes of a mean color distance graph.
+
+        This method computes the mean color of `dst`.
+
+        Parameters
+        ----------
+        graph : RAG
+            The graph under consideration.
+        src, dst : int
+            The vertices in `graph` to be merged.
+        """
+        graph.node[dst]['total color'] += graph.node[src]['total color']
+        graph.node[dst]['pixel count'] += graph.node[src]['pixel count']
+        graph.node[dst]['mean color'] = (graph.node[dst]['total color'] /
+                                         graph.node[dst]['pixel count'])
+    def rag(self, img):
+        # orig = img.copy()
+        labels = skiseg.slic(img, compactness=30, n_segments=400)
+        g = skifut.graph.rag_mean_color(img, labels)
+
+        labels2 = skifut.graph.merge_hierarchical(labels, g, thresh=35, rag_copy=False,
+                                           in_place_merge=True,
+                                           merge_func=self.merge_mean_color,
+                                           weight_func=self._weight_mean_color)
+
+        g2 = skifut.graph.rag_mean_color(img, labels2)
+
+        out = skicol.label2rgb(labels2, img, kind='avg')
+        out = skiseg.mark_boundaries(out, labels2, (0, 0, 0))
+
+        cv2.imshow('in', img)
+        cv2.imshow('RAG', out)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
     def detect(self, img):
         # compute the ratio of the old height to the new height, clone it, and resize it
         ratio = img.shape[0] / 500.0
@@ -368,36 +541,50 @@ class SheetDetector():
         # self.lines(img, edges)
 
         # thresholding
-        # self.threshold(img)
+        cnt = self.thresholding(img)
 
         # color model
         # self.color_model(img)
 
         # superpixels
-        cnt = self.superpixels(img)
+        # cnt = self.superpixels(img)
+
+        # mser
+        # self.mser(img)
+
+        # RAG
+        # self.rag(img)
 
         # align image
         warped = helpers.four_point_transform(img, cnt.reshape(4, 2))
 
-        img_vis = img.copy()
-        cv2.drawContours(img_vis, [cnt], -1, (0, 0, 255), 2)
-        cv2.imshow('orig', img_vis)
-        cv2.imshow('warped', warped)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-        cv2.imwrite('notes.png', warped)
-
-        # show the original image and the edge detected image
-        # cv2.imshow("Image", img)
-        # cv2.imshow("Edged", edges)
+        # img_vis = img.copy()
+        # cv2.drawContours(img_vis, [cnt], -1, (0, 0, 255), 2)
+        # cv2.imshow('orig', img_vis)
+        # cv2.imshow('warped', warped)
         # cv2.waitKey(0)
         # cv2.destroyAllWindows()
+        # cv2.imwrite('notes.png', warped)
 
+        im_vis = img.copy()
+        cv2.drawContours(im_vis, [cnt], -1, (0, 0, 255), 3)
+        return im_vis
 
 if __name__ == '__main__':
-    # fname = '../data/sheet1.png'
-    fname = '../data/sheet2.png'
-    im = cv2.imread(fname)
+    fname1 = '../data/sheet1.png'
+    fname2 = '../data/sheet2.png'
 
-    sd = SheetDetector()
-    sd.detect(im)
+    res = []
+    for f in (fname1, fname2):
+        im = cv2.imread(f)
+
+        sd = SheetDetector()
+        im_res = sd.detect(im)
+        res.append(im_res)
+
+    plt.figure()
+    for i, r in enumerate(res):
+        plt.subplot(1, len(res), i + 1)
+        plt.imshow(cv2.cvtColor(r, cv2.COLOR_BGR2RGB))
+        plt.axis('off')
+    plt.show()
