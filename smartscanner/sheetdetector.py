@@ -8,11 +8,12 @@ import skimage.segmentation as skiseg
 import skimage.future as skifut
 import skimage.color as skicol
 import skimage.feature as skifea
+import skimage.morphology as skimor
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 
 import helpers
-import corner_detector
+import markerdetector
 
 is_cv_v2 = int(cv2.__version__[0]) == 2
 
@@ -46,7 +47,6 @@ class SheetDetector():
         cv2.imshow('Biggest contour', im_vis)
 
     def biggest_contour(self, img):
-        #TODO: nehledat hrany v GRAY ale v jednom z HSV kanalu
         img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         chans = cv2.split(img_hsv)
 
@@ -55,36 +55,10 @@ class SheetDetector():
             # cs = cv2.medianBlur(c, 11)
             chans[i] = cs
 
-        # cv2.imshow('HSV', np.hstack((h, s, v)))
-        # cv2.waitKey(0)
-        # cv2.destroyAllWindows()
-
         plt.figure()
         plt.subplot(131), plt.imshow(chans[0], 'gray')
         plt.subplot(132), plt.imshow(chans[1], 'gray')
         plt.subplot(133), plt.imshow(chans[2], 'gray')
-
-        # GLCM ----
-        # glcms = []
-        # for c in chans:
-        #     glcm = skifea.greycomatrix(c, [1], [0, np.pi/4, np.pi/2, 3*np.pi/4])
-        #     glcm = glcm.sum(axis=3).sum(axis=2)
-        #     glcms.append(glcm)
-        #
-        # plt.figure()
-        # for i, g in enumerate(glcms):
-        #     plt.subplot(1, 3, i + 1), plt.imshow(g, 'jet', interpolation='nearest')
-        # plt.show()
-        # ----
-
-            # plt.figure()
-            # plt.suptitle('ex1=%.2f, ex=%.2f, rat1=%.2f, rat2=%.2f' % (extents[0], extents[1], ratios[0], ratios[1]))
-            # plt.subplot(131), plt.imshow(img, 'gray')
-            # plt.subplot(132), plt.imshow(m1, 'gray')
-            # plt.subplot(133), plt.imshow(m2, 'gray')
-            # plt.show()
-
-        # ----
 
         colors = ("r", "g", "b")
         plt.figure()
@@ -97,20 +71,6 @@ class SheetDetector():
         plt.show()
         edges = cv2.Canny(chans[1], 50, 200)
 
-        # gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        # gray = cv2.bilateralFilter(gray, 11, 5, 5)
-        # edges = cv2.Canny(gray, 50, 200)
-        # edges2 = cv2.Canny(img, 50, 200, apertureSize=5)
-        # edges = cv2.Canny(img, 50, 200, apertureSize=5, L2gradient=True)
-
-        # edges = 255 * (cv2.Laplacian (img, cv2.CV_64F, ksize=3, delta=10) < 0).astype(np.uint8)
-
-        # cv2.imshow('edges', np.hstack((edges, edges2, edges3)))
-        # cv2.imshow('edges', edges)
-        # cv2.waitKey(0)
-
-        # cv2.imshow('edges', edges)
-
         edges = cv2.dilate(edges, np.ones((3, 3)), iterations=2)
         edges = cv2.erode(edges, np.ones((3, 3)), iterations=2)
         cnts = cv2.findContours(edges.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[-2]
@@ -118,7 +78,6 @@ class SheetDetector():
         biggest_c = cnts[0]
         app = cv2.approxPolyDP(biggest_c, 0.01 * cv2.arcLength(biggest_c, True), True)
 
-        # im_vis = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
         im_vis = img.copy()
         cv2.drawContours(im_vis, [app], -1, (0, 0, 255), 2)
         cv2.imshow('biggest contour', im_vis)
@@ -126,7 +85,7 @@ class SheetDetector():
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
-    def thresholding(self, img):
+    def thresholding(self, img, show=False, show_now=True):
         img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         chans = cv2.split(img_hsv)
 
@@ -137,8 +96,10 @@ class SheetDetector():
         candidates = []
         for c in chans:
             ret, th = cv2.threshold(c, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            m1 = c < th
-            m2 = c >= th
+            # m1 = c < th
+            # m2 = c >= th
+            m1 = c < ret
+            m2 = c >= ret
 
             for m in (m1, m2):
                 cnts = cv2.findContours(m.copy().astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[-2]
@@ -155,8 +116,20 @@ class SheetDetector():
         candidates = sorted(candidates, key=lambda cand: cand[1], reverse=True)
 
         obj = candidates[0][0].astype(np.uint8)
-        obj = cv2.erode(obj, np.ones((3,3)), iterations=2)
-        obj = cv2.dilate(obj, np.ones((3,3)), iterations=2)
+        # obj = cv2.erode(obj, np.ones((3,3)), iterations=2)
+        # obj = cv2.dilate(obj, np.ones((3,3)), iterations=2)
+
+        obj_c = cv2.morphologyEx(obj, cv2.MORPH_CLOSE, np.ones((3, 3)))
+        obj_h = skimor.remove_small_holes(obj_c).astype(np.uint8)
+        obj_m = cv2.erode(obj_h, np.ones((5, 5)), iterations=5)
+        obj = cv2.dilate(obj_m, np.ones((5, 5)), iterations=5)
+
+        # plt.figure()
+        # plt.subplot(141), plt.imshow(obj, 'gray')
+        # plt.subplot(142), plt.imshow(obj_c, 'gray')
+        # plt.subplot(143), plt.imshow(obj_h, 'gray')
+        # plt.subplot(144), plt.imshow(obj_m, 'gray')
+        # plt.show()
 
         cnts = cv2.findContours(obj, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[-2]
         cnt = sorted(cnts, key=cv2.contourArea, reverse=True)[0]
@@ -164,13 +137,15 @@ class SheetDetector():
         im_vis = img.copy()
         cv2.drawContours(im_vis, [cnt], -1, (0, 0, 255), 3)
 
-        plt.figure()
-        plt.subplot(141), plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)), plt.title('input'), plt.axis('off')
-        plt.subplot(142), plt.imshow(chans[0], 'gray'), plt.title('hue'), plt.axis('off')
-        plt.subplot(143), plt.imshow(chans[1], 'gray'), plt.title('saturation'), plt.axis('off')
-        plt.subplot(144), plt.imshow(chans[2], 'gray'), plt.title('value'), plt.axis('off')
-        # plt.subplot(155), plt.imshow(cv2.cvtColor(im_vis, cv2.COLOR_BGR2RGB)), plt.title('result'), plt.axis('off')
-        plt.show()
+        if show:
+            plt.figure()
+            plt.subplot(141), plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)), plt.title('input'), plt.axis('off')
+            plt.subplot(142), plt.imshow(chans[0], 'gray'), plt.title('hue'), plt.axis('off')
+            plt.subplot(143), plt.imshow(chans[1], 'gray'), plt.title('saturation'), plt.axis('off')
+            plt.subplot(144), plt.imshow(chans[2], 'gray'), plt.title('value'), plt.axis('off')
+            # plt.subplot(155), plt.imshow(cv2.cvtColor(im_vis, cv2.COLOR_BGR2RGB)), plt.title('result'), plt.axis('off')
+            if show_now:
+                plt.show()
 
         return cnt
 
@@ -272,7 +247,7 @@ class SheetDetector():
         return app
 
     def grow_mask(self, lab_im, mask, img, t=20):
-        #TODO: konverzi obrazku do HDV udelat poue jednou vne teto metody
+        #TODO: konverzi obrazku do HSV udelat pouze jednou vne teto metody
         change = False
         mask_out = mask.copy()
         # find neighboring superpixels
@@ -412,8 +387,8 @@ class SheetDetector():
         cv2.destroyAllWindows()
 
         for pt in corners:
-            roi = corner_detector.get_roi(pt, img.shape, width=31, height=31, img=img)
-            corner_detector.detect_corner(img, roi)
+            roi = markerdetector.get_roi(pt, img.shape, width=31, height=31, img=img)
+            markerdetector.detect_corner(img, roi)
 
         # inters = []
         # line_types = helpers.merge_lines(lines)
@@ -507,29 +482,26 @@ class SheetDetector():
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
-    def detect(self, img):
-        # compute the ratio of the old height to the new height, clone it, and resize it
-        ratio = img.shape[0] / 500.0
+    def detect(self, img, show=False, show_now=True):
+        # compute the scale for resizing
+        if img.shape[0] > img.shape[1]:
+            scale = img.shape[1] // 500
+        else:
+            scale = img.shape[0] // 500
+
         orig = img.copy()
-        img = imutils.resize(img, height=500)
+        img = cv2.resize(img, None, fx=1./scale, fy=1./scale, interpolation=cv2.INTER_AREA)
 
         # convert the image to grayscale, blur it, and find edges
         # in the image
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        # gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         # gauss = cv2.GaussianBlur(gray, (5, 5), 0)
-        bil = cv2.bilateralFilter(gray, 0, sigmaColor=5, sigmaSpace=10)
+        # bil = cv2.bilateralFilter(gray, 0, sigmaColor=5, sigmaSpace=10)
 
         # cv2.imshow('gauss', gray)
         # cv2.imshow('bil', bil)
         # cv2.waitKey(0)
         # cv2.destroyAllWindows()
-
-        # TODO: pridat okraje pro analyzu jasu listu a pozadi
-        # pridat region uprostred, ktery musi obsahovat list
-        # pridat okraje, ktere nesmi obsahovat list
-        # edges = cv2.Canny(bil, 50, 200)
-        # edges = cv2.dilate(edges, np.ones((3, 3)), iterations=2)
-        # edges = cv2.erode(edges, np.ones((3, 3)), iterations=2)
 
         # biggest rot rect
         # self.biggest_rot_rect(img)
@@ -541,7 +513,7 @@ class SheetDetector():
         # self.lines(img, edges)
 
         # thresholding
-        cnt = self.thresholding(img)
+        cnt = self.thresholding(img, show=False)
 
         # color model
         # self.color_model(img)
@@ -555,36 +527,52 @@ class SheetDetector():
         # RAG
         # self.rag(img)
 
-        # align image
-        warped = helpers.four_point_transform(img, cnt.reshape(4, 2))
+        # resize to original size
+        cnt *= scale
 
-        # img_vis = img.copy()
-        # cv2.drawContours(img_vis, [cnt], -1, (0, 0, 255), 2)
+        # align image
+        warped = helpers.four_point_transform(orig, cnt.reshape(4, 2))
+
+        img_vis = orig.copy()
+        cv2.drawContours(img_vis, [cnt], -1, (0, 0, 255), 8)
+
+        if show:
+            plt.figure()
+            plt.subplot(121), plt.imshow(cv2.cvtColor(img_vis, cv2.COLOR_BGR2RGB))
+            plt.subplot(122), plt.imshow(cv2.cvtColor(warped, cv2.COLOR_BGR2RGB))
+            if show_now:
+                plt.show()
+
         # cv2.imshow('orig', img_vis)
         # cv2.imshow('warped', warped)
         # cv2.waitKey(0)
         # cv2.destroyAllWindows()
         # cv2.imwrite('notes.png', warped)
 
-        im_vis = img.copy()
-        cv2.drawContours(im_vis, [cnt], -1, (0, 0, 255), 3)
-        return im_vis
+        # img_vis = img.copy()
+        # cv2.drawContours(img_vis, [cnt], -1, (0, 0, 255), 3)
+        return img_vis, warped
 
 if __name__ == '__main__':
-    fname1 = '../data/sheet1.png'
-    fname2 = '../data/sheet2.png'
+    fname1 = '../data/scan1.jpg'
+    fname2 = '../data/scan2.jpg'
 
+    fnames = (fname1, fname2)
+    # fnames = (fname2,)
     res = []
-    for f in (fname1, fname2):
+    warps = []
+    for f in fnames:
         im = cv2.imread(f)
 
-        sd = SheetDetector()
-        im_res = sd.detect(im)
+        detector = SheetDetector()
+        im_res, warped = detector.detect(im)
         res.append(im_res)
+        warps.append(warped)
 
     plt.figure()
-    for i, r in enumerate(res):
-        plt.subplot(1, len(res), i + 1)
+    for i, r in enumerate(warps):
+        cv2.imwrite('../data/sheet%i.png' % (i + 1), r)
+        plt.subplot(1, len(warps), i + 1)
         plt.imshow(cv2.cvtColor(r, cv2.COLOR_BGR2RGB))
         plt.axis('off')
     plt.show()
