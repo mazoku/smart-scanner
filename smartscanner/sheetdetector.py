@@ -103,7 +103,7 @@ class SheetDetector():
 
             for m in (m1, m2):
                 cnts = cv2.findContours(m.copy().astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[-2]
-                cnt = sorted(cnts, key=cv2.contourArea, reverse=True)[0]
+                cnt = sorted(cnts, key=cv2.contourArea)[-1]
                 rect = cv2.minAreaRect(cnt)
                 ((x, y), (w, h), rot) = rect
                 rat = (w * h) / (c.shape[0] * c.shape[1])
