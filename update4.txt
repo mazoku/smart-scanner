@@ -1,0 +1,21 @@
+Update #4
+---
+<b>Marker detection</b>
+The next goal after localizing and aligning the sheet is to extract the marker, i.e. to search apriori known part of the sheet. The marker is assumed to be written in a rectangle and should be in the top left corner. Therefore, I cropped the image:
+`img[:1/8 * img.shape[0], :1/4 * img.shape[1]]`
+On this region, I applied bilateral filter and Otsu's thresholding and found contours. From these contours, I filtered out contours touching image borders or having extent less than 0.8. The biggest remaining contour was declared as the marker area, see Fig. 1.
+<img src="/uploads/pyimagesearch/original/2X/7/7a24bf3690ae1088ba0d35c07774593b2deb2300.jpg" width="398" height="280">
+Fig. 1: Localized contour of the marker.
+
+After localizing the contour of the marker, I found the bounding box of the contour that corresponds to the region of the marker. After that, once again I applied the Otsu's thresholding and removed all objects touching image borders (to deal with possible parts of the enclosing rectangle that lie in the region), see Fig. 2.
+<img src="/uploads/pyimagesearch/original/2X/c/cdfbcd69b5688765700269f589c1ace0d3e4af49.jpg" width="151" height="143">
+Fig. 2: Thresholded marker
+
+<b>Training a classifier </b>
+The remaining computer vision goal is to recognize the marker. Therefore, I followed the lesson 11.7 and trained a linear SVM. As training data I just wrote a sheet full of letters for each class, see Fig. 3.
+<img src="/uploads/pyimagesearch/original/2X/f/f1f98779d536447dafdae238c369f43a7768ff02.jpg" width="281" height="500">
+Fig. 3: The M-sheet used to train the letter M.
+
+This sheet was cropped and individual letters were localized using the contours. The found letters formed the training data. After the classificator was trained, I evaluated its performance on another sheet, see Fig. 4:
+<img src="/uploads/pyimagesearch/original/2X/1/121e0c40e8780c6258f8289172e1e14c3c7e92ab.jpg" width="690" height="388">
+Fig. 4: Test sheet

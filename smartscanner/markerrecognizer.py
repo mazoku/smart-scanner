@@ -107,9 +107,19 @@ class MarkerRecognizer():
             if (markers == 'ALL' and 'test' not in letter) or letter in markers:
                 sheets.append((letter, cv2.imread(f, 0)))
 
+        # for l, s in sheets:
+        #     plt.figure()
+        #     plt.imshow(s, 'gray')
+        #     plt.show()
+
         markers = self.sheets2data(sheets)
         labels = [x[0] for x in markers]
         data = np.array([x[1] for x in markers])
+
+        # for l, d in zip(labels, data):
+        #     plt.figure()
+        #     plt.imshow(d, 'gray', interpolation='nearest'), plt.title(l)
+        #     plt.show()
 
         # describe
         hogs = self.describe(data)
@@ -261,14 +271,14 @@ class MarkerRecognizer():
 if __name__ == '__main__':
     recog = MarkerRecognizer()
 
-    print 'training ...',
-    recog.train_user(markers='SOMC')
-    print 'done'
-
-    # save model to disk
-    print 'saving model to disk ...',
-    joblib.dump(recog.model, '../data/models/model_svm.cpikle')
-    print 'done'
+    # print 'training ...',
+    # recog.train_user(markers='SOMC')
+    # print 'done'
+    #
+    # # save model to disk
+    # print 'saving model to disk ...',
+    # joblib.dump(recog.model, '../data/models/model_svm.cpikle')
+    # print 'done'
 
     # loading model from disk
     recog.load_model('../data/models/model_svm.cpikle')
@@ -293,10 +303,11 @@ if __name__ == '__main__':
             # cv2.imshow('err', tmp)
             # cv2.waitKey(0)
 
-        cv2.rectangle(im_vis, (x, y), (x + w, y + h), (0, 255, 0), 4)
-        cv2.putText(im_vis, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), thickness=2)
+        cv2.rectangle(im_vis, (x, y), (x + w, y + h), (0, 0, 255), 4)
+        cv2.putText(im_vis, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), thickness=2)
     print 'done'
 
     cv2.imshow('test', im_vis)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
+    cv2.imwrite('../data/recog_result.jpg', im_vis)
