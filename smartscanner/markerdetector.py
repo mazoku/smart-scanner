@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import skimage.transform as skitra
 import skimage.segmentation as skiseg
 
+
 class MarkerDetector():
     def __init__(self):
         pass
@@ -17,7 +18,8 @@ class MarkerDetector():
         border[-1, :] = 1
         border[:, 0] = 1
         border[:, -1] = 1
-        im = cv2.drawContours(np.zeros(shape), [cnt], -1, 1, 2)
+        im = np.zeros(shape)
+        cv2.drawContours(im, [cnt], -1, 1, 2)
         inters = cv2.bitwise_and(border, im)
 
         # plt.figure()
@@ -59,11 +61,6 @@ class MarkerDetector():
         #     cv2.waitKey(0)
         # cv2.destroyAllWindows()
 
-        im_vis = cv2.cvtColor(band, cv2.COLOR_GRAY2BGR)
-        cv2.drawContours(im_vis, [marker_cnt], -1, (0, 0, 255), 2)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-
         # TODO: vyriznout marker
         #   -  oriznout podle bounding rectu kontury
         #   -  naprahovat
@@ -74,9 +71,19 @@ class MarkerDetector():
         marker_t = (marker < th).astype(np.uint8)
         marker = skiseg.clear_border(marker_t)
 
+        # visualization
+        band_vis = cv2.cvtColor(band, cv2.COLOR_GRAY2BGR)
+        cv2.drawContours(band_vis, [marker_cnt], -1, (0, 0, 255), 2)
+        cv2.imshow('band', band_vis)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
+
         cv2.imshow('marker', 255 * marker)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
+
+        cv2.imwrite('../data/band.jpg', band_vis)
+        cv2.imwrite('../data/marker.jpg', 255 * marker)
 
         return marker_cnt
 
