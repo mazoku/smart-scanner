@@ -1,7 +1,7 @@
 import math
 
 import cv2
-import imutils
+# import imutils
 import numpy as np
 import skimage.transform as skitra
 import skimage.segmentation as skiseg
@@ -570,6 +570,7 @@ if __name__ == '__main__':
         warps.append(warped)
 
     plt.figure()
+    # im_vis = np.hstack(tuple(warps))
     for i, r in enumerate(warps):
         cv2.imwrite('../data/sheet%i.png' % (i + 1), r)
         plt.subplot(1, len(warps), i + 1)
